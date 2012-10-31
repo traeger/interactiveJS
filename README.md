@@ -4,6 +4,12 @@ interactiveJS is a interactive JS-script interpreter written in JS for debugging
 
 Based on the parser of UglifyJS (https://github.com/mishoo/UglifyJS), thanks for the great work!
 
+install
+===
+* fork https://github.com/traeger/interactiveJS into a directory of your choice /interactiveJS.
+* fork https://github.com/mishoo/UglifyJS into /interactiveJS/lib/UglifyJS
+  (such that uglify-js.js lies in /interactiveJS/lib/UglifyJS/uglify-js.js)
+
 License
 ===
 interactivJS is released under the BSD license:
