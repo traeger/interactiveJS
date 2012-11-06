@@ -1,1 +1,2 @@
-lib/UglifyJS
+js/UglifyJS
+.DS_Store
