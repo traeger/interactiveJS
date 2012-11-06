@@ -5,6 +5,8 @@
   <script>
    eval(iJS.P.toCode(parse("q = function(y) {return y*2}")));
    alert(q(10));
+   
+   alert(iJS.localVariables(parse("q = function(x) {var y = 1; return x=x+y;}")))
   </script>
  </head>
 </html>

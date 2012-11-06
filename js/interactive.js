@@ -44,6 +44,8 @@ iJS.toCode = function(parsed) {
 
 /* parsed to pretty code converter */
 iJS.P = new Object();
+/* helper */
+iJS.H = new Object();
 
 /*****
  ***** config and initis
@@ -55,11 +57,6 @@ var exports = new Object();
 
 /* tmp error handler - change this */
 error = alert;
-
-/*****
- ***** END
- ***** config and initis 
- *****/
 
 /*****
  ***** parsed to pretty code converter
@@ -79,7 +76,7 @@ iJS.P.toCode = function (parsed, intent) {
     case "if":
       return iJS.P.white(intent) + "if(" + iJS.P.toCode(parsed[1], intent) + ") " + iJS.P.intentCode(parsed[2], intent);
     case "defun":
-      return iJS.P.white(intent) + "function " + parsed[1] + "(" + iJS.P.intercalate(",", parsed[2]) + ") " + iJS.P.blockToCode(parsed[3], intent);
+      return iJS.P.white(intent) + "function " + parsed[1] + "(" + iJS.H.intercalate(",", parsed[2]) + ") " + iJS.P.blockToCode(parsed[3], intent);
     case "return":
       return iJS.P.white(intent) + "return " + iJS.P.toCode(parsed[1], intent) + ";\n";
     /* stmt cases */
@@ -92,7 +89,7 @@ iJS.P.toCode = function (parsed, intent) {
       var expr = function(parsed) {
         return iJS.P.toCode(parsed, intent);
       }
-      return iJS.P.toCode(parsed[1], intent) + "(" + iJS.P.intercalate(", ", parsed[2].map(expr) ) + ")";
+      return iJS.P.toCode(parsed[1], intent) + "(" + iJS.H.intercalate(", ", parsed[2].map(expr) ) + ")";
     /* expr cases */
     case "num":
       return parsed[1];
@@ -105,21 +102,10 @@ iJS.P.toCode = function (parsed, intent) {
     case "binary":
       return iJS.P.toCode(parsed[2], intent) + " " + parsed[1] + " " + iJS.P.toCode(parsed[3], intent)
     case "function":
-      return "function(" + iJS.P.intercalate(", ", parsed[2]) + ") " + iJS.P.blockToCode(parsed[3], intent);
+      return "function(" + iJS.H.intercalate(", ", parsed[2]) + ") " + iJS.P.blockToCode(parsed[3], intent);
     default:
       error("unkown case " + parsed[0] + ": \n" + parsed);
   }
-}
-
-/* intercalates an array with a seperator
- * intercalate(" - ", ["a","b","c"]) = "a - b - c" */ 
-iJS.P.intercalate = function (seperator, as) {
-  result = "";
-  for(i in as) {
-    if(i > 0) result += seperator;
-    result += as[i];
-  }
-  return result;
 }
 
 /* given number of white spaces */
@@ -169,18 +155,82 @@ iJS.P.intentCode = function (parsed, intent) {
 }
 
 /*****
- ***** END
- ***** parsed to pretty code converter
- *****/
-
-/*****
  ***** find local variables
  *****
  *****/
 
+/* all local variables in a gobal scope */
+iJS.localVariables = function (parsed) {
+  switch(parsed[0]) {
+    case "toplevel":
+      return iJS.H.unions(parsed[1].map(iJS.localVariables));
+    case "stat":
+      return iJS.localVariables(parsed[1]);
+    case "if":
+      return iJS.H.unions(parsed[2].map(iJS.localVariablesScope));
+    case "defun":
+    case "function":
+      return parsed[2].concat(
+          iJS.H.unions(parsed[3].map(iJS.localVariablesScope))
+        );
+    case "assign":
+      return iJS.localVariables(parsed[3]);
+    default:
+      [];
+    }
+}
 
+/* all local variables in a local scope */
+iJS.localVariablesScope = function(parsed) {
+  switch(parsed[0]) {
+    case "toplevel":
+      return iJS.H.unions(parsed[1].map(iJS.localVariablesScope));
+    case "var":
+      return iJS.H.unions(parsed[1].map(iJS.H.head));
+    case "stat":
+      return iJS.localVariablesScope(parsed[1]);
+    case "if":
+      return iJS.H.unions(parsed[2].map(iJS.localVariablesScope));
+    case "defun":
+    case "function":
+      return parsed[2].concat(
+          iJS.H.unions(parsed[3].map(iJS.localVariablesScope))
+        );
+    case "name":
+      return [parsed[1]];
+    case "sub":
+      return [parsed[1]];
+    case "assign":
+      return iJS.localVariablesScope(parsed[2]);
+    default:
+      return [];
+  }
+}
 
 /*****
- ***** END
- ***** find local variables
+ ***** helper
+ *****
  *****/
+
+/* head of an array */
+iJS.H.head = function (x) {return x[0]};
+
+/* union of arrays to one array */
+iJS.H.unions = function(ass) {
+  var result = [];
+  for(i = 0; i < ass.length; i++) {
+    result = result.concat(ass[i]);
+  }
+  return result;
+}
+
+/* intercalates an array with a seperator
+ * intercalate(" - ", ["a","b","c"]) = "a - b - c" */ 
+iJS.H.intercalate = function (seperator, as) {
+  var result = "";
+  for(i in as) {
+    if(i > 0) result += seperator;
+    result += as[i];
+  }
+  return result;
+}
