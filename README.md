@@ -6,9 +6,9 @@ Based on the parser of UglifyJS (https://github.com/mishoo/UglifyJS), thanks for
 
 install
 ===
-* fork https://github.com/traeger/interactiveJS into a directory of your choice /interactiveJS.
-* fork https://github.com/mishoo/UglifyJS into /interactiveJS/lib/UglifyJS
-  (such that uglify-js.js lies in /interactiveJS/lib/UglifyJS/uglify-js.js)
+* fork https://github.com/traeger/interactiveJS into a directory of your choice (here /interactiveJS).
+* fork https://github.com/mishoo/UglifyJS into /interactiveJS/js/UglifyJS
+  (such that uglify-js.js lies in /interactiveJS/js/UglifyJS/uglify-js.js)
 
 License
 ===
