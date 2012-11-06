@@ -98,7 +98,7 @@ iJS.C.toCode = function (parsed) {
 iJS.C.lineToCode = function (parsed, intent) {
   switch(parsed[0]) {
     case "stat":
-      return iJS.C.white(intent) + iJS.C.stmtToCode(parsed[1], intent) + "\n";
+      return iJS.C.white(intent) + iJS.C.stmtToCode(parsed[1], intent) + ";\n";
     case "if":
       return iJS.C.white(intent) + "if(" + iJS.C.exprToCode(parsed[1], intent) + ") " + iJS.C.intentCode(parsed[2], intent);
     case "defun":
@@ -153,6 +153,8 @@ iJS.C.stmtToCode = function (parsed, intent) {
   switch(parsed[0]) {
     case "assign":
       return iJS.C.assignToCode(parsed[2], parsed[3], intent);
+    case "call":
+      return iJS.C.callToCode(parsed[1], parsed[2], intent);
     default:
       error("unkown stmt" + parsed);
   }
@@ -170,6 +172,8 @@ iJS.C.exprToCode = function (parsed, intent) {
       return parsed[1];
     case "name":
       return parsed[1];
+    case "string":
+      return "\"" + parsed[1] + "\"";
     case "call":
       return iJS.C.callToCode(parsed[1], parsed[2], intent);
     case "sub":
@@ -177,7 +181,7 @@ iJS.C.exprToCode = function (parsed, intent) {
     case "binary":
       return iJS.C.exprToCode(parsed[2], intent) + " " + parsed[1] + " " + iJS.C.exprToCode(parsed[3], intent)
     case "function":
-      return "function(" + iJS.C.intercalate(parsed[2]) + ") " + iJS.C.blockToCode(parsed[3], intent);
+      return "function(" + iJS.C.intercalate(", ", parsed[2]) + ") " + iJS.C.blockToCode(parsed[3], intent);
     default:
       error("unkown expr" + parsed);
   }
