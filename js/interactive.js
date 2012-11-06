@@ -171,8 +171,8 @@ iJS.localVariables = function (parsed) {
     case "defun":
     case "function":
       return parsed[2].concat(
-          iJS.H.unions(parsed[3].map(iJS.localVariablesScope))
-        );
+        iJS.H.unions(parsed[3].map(iJS.localVariablesScope))
+      );
     case "assign":
       return iJS.localVariables(parsed[3]);
     default:
@@ -180,7 +180,7 @@ iJS.localVariables = function (parsed) {
     }
 }
 
-/* all local variables in a local scope */
+/* all glocal variables in a local scope */
 iJS.localVariablesScope = function(parsed) {
   switch(parsed[0]) {
     case "toplevel":
@@ -194,14 +194,16 @@ iJS.localVariablesScope = function(parsed) {
     case "defun":
     case "function":
       return parsed[2].concat(
-          iJS.H.unions(parsed[3].map(iJS.localVariablesScope))
-        );
+        iJS.H.unions(parsed[3].map(iJS.localVariablesScope))
+      );
     case "name":
       return [parsed[1]];
     case "sub":
       return [parsed[1]];
     case "assign":
-      return iJS.localVariablesScope(parsed[2]);
+      return iJS.localVariablesScope(parsed[2]).concat(
+        iJS.localVariablesScope(parsed[3])
+      );
     default:
       return [];
   }
