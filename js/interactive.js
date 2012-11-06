@@ -36,8 +36,14 @@ SUCH DAMAGE.
 */
 
 iJS = new Object();
+
+/* parsed into pretty code converter */
+iJS.toCode = function(parsed) {
+  return iJS.P.toCode(parsed);
+}
+
 /* parsed to pretty code converter */
-iJS.C = new Object();
+iJS.P = new Object();
 
 /*****
  ***** config and initis
@@ -60,9 +66,54 @@ error = alert;
  ***** 
  *****/
 
+/* parsed into pretty code converter */
+iJS.P.toCode = function (parsed, intent) {
+  switch(parsed[0]) {
+    case "toplevel":
+      return iJS.P.linesToCode(parsed[1], 0);
+    /* linecases */
+    case "var":
+      return "var " + parsed[1] + ";\n";
+    case "stat":
+      return iJS.P.white(intent) + iJS.P.toCode(parsed[1], intent) + ";\n";
+    case "if":
+      return iJS.P.white(intent) + "if(" + iJS.P.toCode(parsed[1], intent) + ") " + iJS.P.intentCode(parsed[2], intent);
+    case "defun":
+      return iJS.P.white(intent) + "function " + parsed[1] + "(" + iJS.P.intercalate(",", parsed[2]) + ") " + iJS.P.blockToCode(parsed[3], intent);
+    case "return":
+      return iJS.P.white(intent) + "return " + iJS.P.toCode(parsed[1], intent) + ";\n";
+    /* stmt cases */
+    case "assign":
+      return iJS.P.toCode(parsed[2], intent) + " = " + iJS.P.toCode(parsed[3], intent);
+    case "call":
+      /* partial fixed assign of parameter s.t. the new function
+       * have only one argument for the use with Array.map
+       */
+      var expr = function(parsed) {
+        return iJS.P.toCode(parsed, intent);
+      }
+      return iJS.P.toCode(parsed[1], intent) + "(" + iJS.P.intercalate(", ", parsed[2].map(expr) ) + ")";
+    /* expr cases */
+    case "num":
+      return parsed[1];
+    case "name":
+      return parsed[1];
+    case "string":
+      return "\"" + parsed[1] + "\"";
+    case "sub":
+      return iJS.P.toCode(parsed[1], intent) + "[" + iJS.P.toCode(parsed[2]) + "]";
+    case "binary":
+      return iJS.P.toCode(parsed[2], intent) + " " + parsed[1] + " " + iJS.P.toCode(parsed[3], intent)
+    case "function":
+      return "function(" + iJS.P.intercalate(", ", parsed[2]) + ") " + iJS.P.blockToCode(parsed[3], intent);
+    default:
+      error("unkown case " + parsed[0] + ": \n" + parsed);
+  }
+}
+
 /* intercalates an array with a seperator
  * intercalate(" - ", ["a","b","c"]) = "a - b - c" */ 
-iJS.C.intercalate = function (seperator, as) {
+iJS.P.intercalate = function (seperator, as) {
   result = "";
   for(i in as) {
     if(i > 0) result += seperator;
@@ -72,51 +123,20 @@ iJS.C.intercalate = function (seperator, as) {
 }
 
 /* given number of white spaces */
-iJS.C.white = function (num) {
+iJS.P.white = function (num) {
   result = "";
   for(var i = 0; i < num; i++)
     result += " ";
   return result;
 }
 
-/* toplevel */
-iJS.C.toCode = function (parsed) {
-  if(parsed[0] === "toplevel") {
-    result = "";
-    for(i = 0; i < parsed[1].length; i++) {
-      result += iJS.C.lineToCode(parsed[1][i], 0);
-      result += "\n";
-    }
-    return result;
-  } else {
-    error;
-  }
-}
-
-/* line
- * creates an ending newline. */
-iJS.C.lineToCode = function (parsed, intent) {
-  switch(parsed[0]) {
-    case "stat":
-      return iJS.C.white(intent) + iJS.C.stmtToCode(parsed[1], intent) + ";\n";
-    case "if":
-      return iJS.C.white(intent) + "if(" + iJS.C.exprToCode(parsed[1], intent) + ") " + iJS.C.intentCode(parsed[2], intent);
-    case "defun":
-      return iJS.C.white(intent) + "function " + parsed[1] + "(" + iJS.C.intercalate(",", parsed[2]) + ") " + iJS.C.blockToCode(parsed[3], intent);
-    case "return":
-      return iJS.C.white(intent) + "return " + iJS.C.exprToCode(parsed[1], intent) + ";\n";
-    default:
-      error("unkown line" + parsed);
-  }
-}
-
-/* converts an array of lines of code, seperates each line by a newline, used iJS.C.lineToCode
+/* converts an array of lines of code, seperates each line by a newline, used iJS.P.lineToCode
  * creates an ending newline.
  */
-iJS.C.linesToCode = function (parsed, intent) {
+iJS.P.linesToCode = function (parsed, intent) {
   result = "";
   for(i = 0; i < parsed.length; i++) {
-    result += iJS.C.lineToCode(parsed[i], intent);
+    result += iJS.P.toCode(parsed[i], intent);
   }
   return result;
 }
@@ -129,10 +149,10 @@ iJS.C.linesToCode = function (parsed, intent) {
  *   bla;
  * }
  */
-iJS.C.blockToCode = function (parsed, intent) {
+iJS.P.blockToCode = function (parsed, intent) {
   result = "{\n";
-  result += iJS.C.linesToCode(parsed, intent + 2)
-  result += iJS.C.white(intent) + "}\n"
+  result += iJS.P.linesToCode(parsed, intent + 2)
+  result += iJS.P.white(intent) + "}\n"
   return result;
 }
 
@@ -140,66 +160,27 @@ iJS.C.blockToCode = function (parsed, intent) {
  * this functions checks whether the intented code is a block statement
  * if so a { ... }-block is created otherwise the statement is only intended.
  */
-iJS.C.intentCode = function (parsed, intent) {
+iJS.P.intentCode = function (parsed, intent) {
   if(parsed[0] === "block") {
-    return iJS.C.blockToCode(parsed[1], intent);
+    return iJS.P.blockToCode(parsed[1], intent);
   } else {
-    return "\n"+ iJS.C.lineToCode(parsed, intent + 2);
+    return "\n"+ iJS.P.toCode(parsed, intent + 2);
   }
-}
-
-/* statement */
-iJS.C.stmtToCode = function (parsed, intent) {
-  switch(parsed[0]) {
-    case "assign":
-      return iJS.C.assignToCode(parsed[2], parsed[3], intent);
-    case "call":
-      return iJS.C.callToCode(parsed[1], parsed[2], intent);
-    default:
-      error("unkown stmt" + parsed);
-  }
-}
-
-/* assignment */
-iJS.C.assignToCode = function (parsedLHS, parsedRHS, intent) {
-  return iJS.C.exprToCode(parsedLHS, intent) + " = " + iJS.C.exprToCode(parsedRHS, intent) + ";";
-}
-
-/* expr */
-iJS.C.exprToCode = function (parsed, intent) {
-  switch(parsed[0]) {
-    case "num":
-      return parsed[1];
-    case "name":
-      return parsed[1];
-    case "string":
-      return "\"" + parsed[1] + "\"";
-    case "call":
-      return iJS.C.callToCode(parsed[1], parsed[2], intent);
-    case "sub":
-      return iJS.C.exprToCode(parsed[1], intent) + "[" + iJS.C.exprToCode(parsed[2]) + "]";
-    case "binary":
-      return iJS.C.exprToCode(parsed[2], intent) + " " + parsed[1] + " " + iJS.C.exprToCode(parsed[3], intent)
-    case "function":
-      return "function(" + iJS.C.intercalate(", ", parsed[2]) + ") " + iJS.C.blockToCode(parsed[3], intent);
-    default:
-      error("unkown expr" + parsed);
-  }
-}
-
-/* function calls */
-iJS.C.callToCode = function (name, params, intent) {
-  /* partial fixed assign of parameter s.t. the new function
-   * have only one argument for the use with Array.map
-   */
-  var expr = function(parsed) {
-    return iJS.C.exprToCode(parsed, intent);
-  }
-  
-  return iJS.C.exprToCode(name, intent) + "(" + iJS.C.intercalate(", ", params.map(expr) ) + ")";
 }
 
 /*****
  ***** END
  ***** parsed to pretty code converter
+ *****/
+
+/*****
+ ***** find local variables
+ *****
+ *****/
+
+
+
+/*****
+ ***** END
+ ***** find local variables
  *****/
