@@ -299,7 +299,7 @@ iJS.preplaceLocalVariablesScope = function (parsed, f) {
  *****
  *****/
 
-/* Generates linewise executable code.
+/* Generates linewise executable code from parsed code (via Uglify-js).
  *
  * Generates functions to execute each line
  * of the input and put them all together
@@ -316,25 +316,20 @@ iJS.G.gen = function (parsed) {
     error("toplevel expected");
   
   /* wraps a function around each line
-   * of a parsed input and join them
-   * all into an array (A).
-   * The i'th line can be excuted via
-   * eval(A[i]).
+   * of a parsed input
    */
   var parsedLines = parsed[1];
   var fwrapLines = [];
   for(i in parsedLines) {
     fwrapLines.push(
-      iJS.G.fwrap(parsedLines[i])
+      [ "function", null, [], [parsedLines[i]] ]
     );
   }
 
+  /* put them all together in an array,
+   * generate pretty code, and execute it.
+   */
   return eval(iJS.toCode(["array",fwrapLines]));
-}
-
-/* wrap a function around a parsed line */
-iJS.G.fwrap = function(parsedLine) {
-  return ["function", null, [], [parsedLine]];
 }
 
 /*****
