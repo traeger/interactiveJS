@@ -1,17 +1,30 @@
 <html>
- <head>
-  <script src="../js/interactive.js"></script>
-  <script src="../js/UglifyJS/lib/parse-js.js"></script>
-  <script>
-   eval(iJS.P.toCode(parse("q = function(y) {return y*2}")));
-   alert(q(10));
+  <head>
+    <script src="../js/interactive.js"></script>
+    <script src="../js/UglifyJS/lib/parse-js.js"></script>
+    <script>
+      eval(iJS.P.toCode(parse("q = function(y) {return y*2}")));
+      alert(q(10));
    
-   alert(
-     iJS.localVariables(parse("q = function(x) {var y = 1; return x=x+y;}"))
-   );
-   alert(
-     iJS.localVariablesScope(parse("q = function(x) {var y = 1; return x=x+y;}"))
-   );
-  </script>
- </head>
+      alert(
+        iJS.localVariables(parse("q = function(x) {var y = 1; return x=x+y;}"))
+      );
+      alert(
+        iJS.localVariablesScope(parse("q = function(x) {var y = 1; return x=x+y;}"))
+      );
+   
+      p = function(x) {
+        switch(x) {
+          case "x": return "x1";
+          case "y": return "y1";
+          default: return x;
+        }
+      }
+      alert(
+        iJS.P.toCode(iJS.preplaceLocalVariables(
+          parse("q = function(x) {var y = 1; return x=x+y;}"), p
+        ))
+      );
+    </script>
+  </head>
 </html>

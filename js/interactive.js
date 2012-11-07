@@ -70,7 +70,7 @@ iJS.P.toCode = function (parsed, intent) {
       return iJS.P.linesToCode(parsed[1], 0);
     /* linecases */
     case "var":
-      return "var " + parsed[1] + ";\n";
+      return iJS.P.white(intent) + "var " + parsed[1].map(function(x) {return x[0] + " = " + iJS.P.toCode(x[1], intent)} ) + ";\n";
     case "stat":
       return iJS.P.white(intent) + iJS.P.toCode(parsed[1], intent) + ";\n";
     case "if":
@@ -177,7 +177,7 @@ iJS.localVariables = function (parsed) {
       return iJS.localVariables(parsed[3]);
     default:
       [];
-    }
+  }
 }
 
 /* all glocal variables in a local scope */
@@ -206,6 +206,80 @@ iJS.localVariablesScope = function(parsed) {
       );
     default:
       return [];
+  }
+}
+
+iJS.preplaceLocalVariables = function (parsed, f) {
+  var _f = function(p) {return iJS.preplaceLocalVariables(p, f)};
+  var _g = function(p) {return iJS.preplaceLocalVariablesScope(p, f)};
+  
+  switch(parsed[0]) {
+    case "toplevel":
+      return [ parsed[0], parsed[1].map(_f) ];
+    /* linecases */
+    case "var":
+      return [ parsed[0], parsed[1].map(function (x) {return [x[0], _f(x[1])];}) ];
+    case "stat":
+    case "return":
+      return [ parsed[0], _f(parsed[1]) ];
+    case "if":
+      return [ parsed[0], parsed[1], parsed[2].map(_g) ];
+    case "defun":
+    case "function":
+      return [ parsed[0], parsed[1], parsed[2].map(f), parsed[3].map(_g) ];
+    /* stmt cases */
+    case "assign":
+      return [ parsed[0], parsed[1], _f(parsed[2]), _f(parsed[3]) ];
+    case "call":
+      return [ parsed[0], parsed[1], parsed[2].map(_f) ];
+    /* expr cases */
+    case "name":
+    case "num":
+    case "string":
+      return [ parsed[0], parsed[1] ];
+    case "sub":
+      return [ parsed[0], _f(parsed[1]), _f(parsed[2]) ];
+    case "binary":
+      return [ parsed[0], parsed[1], _f(parsed[2]), _f(parsed[3]) ];
+    default:
+      error("unkown case " + parsed[0] + ": \n" + parsed);
+  }
+}
+
+iJS.preplaceLocalVariablesScope = function (parsed, f) {
+  var _g = function(p) {return iJS.preplaceLocalVariablesScope(p, f)}
+  
+  switch(parsed[0]) {
+    case "toplevel":
+      return [ parsed[0], parsed[1].map(_g) ];
+    /* linecases */
+    case "var":
+      return [ parsed[0], parsed[1].map(function (x) {return [f(x[0]), _g(x[1])];}) ];
+    case "stat":
+    case "return":
+      return [ parsed[0], _g(parsed[1]) ];
+    case "if":
+      return [ parsed[0], _g(parsed[1]), parsed[2].map(_g) ];
+    case "defun":
+    case "function":
+      return [ parsed[0], parsed[1], parsed[2].map(f), parsed[3].map(_g) ];
+    /* stmt cases */
+    case "assign":
+      return [ parsed[0], parsed[1], _g(parsed[2]), _g(parsed[3]) ];
+    case "call":
+      return [ parsed[0], _g(parsed[1]), parsed[2].map(_g) ];
+    /* expr cases */
+    case "name":
+      return [ parsed[0], f(parsed[1]) ];
+    case "num":
+    case "string":
+      return [ parsed[0], parsed[1] ];
+    case "sub":
+      return [ parsed[0], _g(parsed[1]), _g(parsed[2]) ];
+    case "binary":
+      return [ parsed[0], parsed[1], _g(parsed[2]), _g(parsed[3]) ];
+    default:
+      error("unkown case " + parsed[0] + ": \n" + parsed);
   }
 }
 
