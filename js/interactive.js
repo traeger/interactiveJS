@@ -332,6 +332,39 @@ iJS.G.gen = function (parsed) {
   return eval(iJS.toCode(["array",fwrapLines]));
 }
 
+/* Iterates an array.
+ *
+ * The callback is a function with two arguments
+ * (the current element, the recursive call to this functions)
+ * the recursive call argument need to be called when the next
+ * element should be iterated.
+ *
+ * Pattern:
+  g = function(a, iterator) {
+    .. do stuff with a ..
+    iterator();
+  }
+  iJS.G.iterate(as, g);
+ * this will call g for each element in as.
+ *
+ * This pattern allows asynchrone iterations - through events and
+ * all that. Beware that this style of iteration is very resource
+ * intensive and generates a giant stack in some cases.
+ */
+iJS.G.interate = function(as, callback) {
+  if(as.length == 0)
+    return;
+  else {
+    a = as.shift();
+    callback(
+      a,
+      function() {
+        iJS.G.interate(as, callback);
+      }
+    );
+  }
+}
+
 /*****
  ***** helper
  *****
