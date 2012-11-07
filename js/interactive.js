@@ -44,6 +44,8 @@ iJS.toCode = function(parsed) {
 
 /* parsed to pretty code converter */
 iJS.P = new Object();
+/* code generations for interactive code execution. */
+iJS.G = new Object();
 /* helper */
 iJS.H = new Object();
 
@@ -65,6 +67,13 @@ error = alert;
 
 /* parsed into pretty code converter */
 iJS.P.toCode = function (parsed, intent) {
+  /* partial fixed assign of parameter s.t. the new function
+   * have only one argument for the use with Array.map
+   */
+  var _f = function(parsed) {
+    return iJS.P.toCode(parsed, intent);
+  }
+  
   switch(parsed[0]) {
     case "toplevel":
       return iJS.P.linesToCode(parsed[1], 0);
@@ -83,13 +92,7 @@ iJS.P.toCode = function (parsed, intent) {
     case "assign":
       return iJS.P.toCode(parsed[2], intent) + " = " + iJS.P.toCode(parsed[3], intent);
     case "call":
-      /* partial fixed assign of parameter s.t. the new function
-       * have only one argument for the use with Array.map
-       */
-      var expr = function(parsed) {
-        return iJS.P.toCode(parsed, intent);
-      }
-      return iJS.P.toCode(parsed[1], intent) + "(" + iJS.H.intercalate(", ", parsed[2].map(expr) ) + ")";
+      return iJS.P.toCode(parsed[1], intent) + "(" + iJS.H.intercalate(", ", parsed[2].map(_f) ) + ")";
     /* expr cases */
     case "num":
       return parsed[1];
@@ -103,6 +106,8 @@ iJS.P.toCode = function (parsed, intent) {
       return iJS.P.toCode(parsed[2], intent) + " " + parsed[1] + " " + iJS.P.toCode(parsed[3], intent)
     case "function":
       return "function(" + iJS.H.intercalate(", ", parsed[2]) + ") " + iJS.P.blockToCode(parsed[3], intent);
+    case "array":
+      return "[" + iJS.H.intercalate(", ", parsed[1].map(_f) ) + "]";
     default:
       error("unkown case " + parsed[0] + ": \n" + parsed);
   }
@@ -163,6 +168,7 @@ iJS.P.intentCode = function (parsed, intent) {
 iJS.localVariables = function (parsed) {
   switch(parsed[0]) {
     case "toplevel":
+    case "array":
       return iJS.H.unions(parsed[1].map(iJS.localVariables));
     case "stat":
       return iJS.localVariables(parsed[1]);
@@ -184,6 +190,7 @@ iJS.localVariables = function (parsed) {
 iJS.localVariablesScope = function(parsed) {
   switch(parsed[0]) {
     case "toplevel":
+    case "array":
       return iJS.H.unions(parsed[1].map(iJS.localVariablesScope));
     case "var":
       return iJS.H.unions(parsed[1].map(iJS.H.head));
@@ -209,12 +216,14 @@ iJS.localVariablesScope = function(parsed) {
   }
 }
 
+/* replace all local variables using f in a gobal scope */
 iJS.preplaceLocalVariables = function (parsed, f) {
   var _f = function(p) {return iJS.preplaceLocalVariables(p, f)};
   var _g = function(p) {return iJS.preplaceLocalVariablesScope(p, f)};
   
   switch(parsed[0]) {
     case "toplevel":
+    case "array":
       return [ parsed[0], parsed[1].map(_f) ];
     /* linecases */
     case "var":
@@ -246,11 +255,13 @@ iJS.preplaceLocalVariables = function (parsed, f) {
   }
 }
 
+/* replace all local variables using f in a local scope */
 iJS.preplaceLocalVariablesScope = function (parsed, f) {
   var _g = function(p) {return iJS.preplaceLocalVariablesScope(p, f)}
   
   switch(parsed[0]) {
     case "toplevel":
+    case "array":
       return [ parsed[0], parsed[1].map(_g) ];
     /* linecases */
     case "var":
@@ -281,6 +292,49 @@ iJS.preplaceLocalVariablesScope = function (parsed, f) {
     default:
       error("unkown case " + parsed[0] + ": \n" + parsed);
   }
+}
+
+/*****
+ ***** interactive code generator
+ *****
+ *****/
+
+/* Generates linewise executable code.
+ *
+ * Generates functions to execute each line
+ * of the input and put them all together
+ * in an array (A).
+ * The i'th line can be executed via
+ * A[i]();
+ *
+ * TBD:
+ * - local variable replacement
+ * - handling of functions
+ */
+iJS.G.gen = function (parsed) {
+  if(parsed[0] != "toplevel")
+    error("toplevel expected");
+  
+  /* wraps a function around each line
+   * of a parsed input and join them
+   * all into an array (A).
+   * The i'th line can be excuted via
+   * eval(A[i]).
+   */
+  var parsedLines = parsed[1];
+  var fwrapLines = [];
+  for(i in parsedLines) {
+    fwrapLines.push(
+      iJS.G.fwrap(parsedLines[i])
+    );
+  }
+
+  return eval(iJS.toCode(["array",fwrapLines]));
+}
+
+/* wrap a function around a parsed line */
+iJS.G.fwrap = function(parsedLine) {
+  return ["function", null, [], [parsedLine]];
 }
 
 /*****
