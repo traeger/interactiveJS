@@ -4,6 +4,35 @@ interactiveJS is a interactive JS-script interpreter written in JS for debugging
 
 Based on the parser of UglifyJS (https://github.com/mishoo/UglifyJS), thanks for the great work!
 
+basic js-code evaluation
+===
+
+* (1) js code is parsed (into a parse-tree) with the parser of Uglify-js
+* (2) all local variables are renamed to be unique in the parse-tree
+* (3) than the parse-tree is decomposed into
+  * a chuck (parse-tree) c_i for each function f_i found in the code
+  * the main chuck c (parsed-tree) (the code without the function definitions)
+* (4) a bottom-up,left-right evaluation of c is performed
+  * whenever hitting a function f_i, all parameters of f_i are assigned
+    (to the unique renamed local variables),then the chuck c_i is evaluated 
+    bottom-up,left-right
+
+interactive js-code evaluation
+===
+
+instead of a simple evaluation a evaluation-tree is build ontop of the
+parse-tree in (4).
+  * each node v in the parse-tree get a parent node which contains
+    * v
+    * the evaluation of v based on the evaluation of the parts of v
+      (this can be easily archived via the bottom-up,left-right evaluation)
+      (note that this style of evaluation obmitts double-evaluation!
+      and gives simular results as if use a simple js-eval instead)
+
+now we step through the tree in bottom-up,left-right order to show
+a simulation of the evaluation of the code. Also we can simulate a debugger
+and show the variable assignments for each statement and expression.
+
 install
 ===
 * fork https://github.com/traeger/interactiveJS into a directory of your choice (here /interactiveJS).
