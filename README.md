@@ -4,8 +4,11 @@ interactiveJS is a interactive JS-script interpreter written in JS for debugging
 
 Based on the parser of UglifyJS (https://github.com/mishoo/UglifyJS), thanks for the great work!
 
-basic js-code evaluation
+js code evaluation
 ===
+
+basic evaluation
+---
 
 * (1) js code is parsed (into a parse-tree) with the parser of Uglify-js
 * (2) all local variables are renamed to be unique in the parse-tree
@@ -17,8 +20,8 @@ basic js-code evaluation
     (to the unique renamed local variables),then the chuck c_i is evaluated 
     bottom-up,left-right
 
-interactive js-code evaluation
-===
+interactive evaluation
+---
 
 instead of a simple evaluation a evaluation-tree is build ontop of the
 parse-tree in (4).
