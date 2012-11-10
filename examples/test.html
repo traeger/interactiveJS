@@ -16,18 +16,17 @@
       );
    
       // test preplaceLocalVariables
-      p = function(x) {
-        switch(x) {
-          case "x": return "x1";
-          case "y": return "y1";
-          default: return x;
+      t = iJS.P.toCode(iJS.globalizeLocalVariables(
+        parse("p = function(x) {var y = 1; return x+y;}"), "s"
+      ));
+      alert(t); eval(t);
+      var s = new Object();
+      alert("p(5): " + p(5));
+      for (var key in s) {
+        if (s.hasOwnProperty(key)) {
+          alert("s." + key + ": " + s[key]);
         }
       }
-      alert(
-        iJS.P.toCode(iJS.preplaceLocalVariables(
-          parse("q = function(x) {var y = 1; return x=x+y;}"), p
-        ))
-      );
       
       // test linewise executable code generation
       f = iJS.G.gen(parse("x = 1; y = x;"));
