@@ -16,23 +16,33 @@
       );
    
       // test preplaceLocalVariables
-      t = iJS.P.toCode(iJS.globalizeLocalVariables(
-        parse("p = function(x) {var y = 1; return x+y;}"), "s"
+      pStr = "p = function(x) {var y = 1; return x+y;}";
+      pCode = iJS.P.toCode(iJS.globalizeLocalVariables(
+        parse(pStr), "s"
       ));
-      alert(t); eval(t);
-      var s = new Object();
-      alert("p(5): " + p(5));
-      for (var key in s) {
-        if (s.hasOwnProperty(key)) {
-          alert("s." + key + ": " + s[key]);
-        }
-      }
+      alert(pCode);
+      // eval(pCode);
+      // var s = new Object();
+      // alert("p(5): " + p(5));
+      // for (var key in s) {
+      //   if (s.hasOwnProperty(key)) {
+      //     alert("s." + key + ": " + s[key]);
+      //   }
+      // }
       
       // test linewise executable code generation
       f = iJS.G.gen(parse("x = 1; y = x;"));
       x = 10;
       f[1]();
       alert("y expected to be 10. y is " + y);
+      
+      // code decomposer
+      dcmPa = iJS.P.decompose(parse("p = function(x) {var y = 1; return x+y;}"), "s");
+      
+      dcmPb = iJS.P.decompose(parse("function p(x) {var y = 1; return x+y;}"), "s");
+      
+      dcmPcS = parse("if(x==1) {var x = 1; if(x==1) {var x = 2;}}");
+      dcmPc = iJS.P.decompose(dcmPcS, "s");
     </script>
   </head>
 </html>

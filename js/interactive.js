@@ -112,8 +112,6 @@ iJS.P.toCode = function (parseTree, intent) {
       return "[" + iJS.H.intercalate(", ", parseTree[1].map(_f) ) + "]";
     case "__eval":
       return parseTree[2];
-    case "__paramassign":
-      return iJS.P.white(intent) + parseTree[1].map(function(x) {return x[0] + " = " + _f(x[1])} ) + ";\n";
     default:
       error("unkown case " + parseTree[0] + ": \n" + parseTree);
   }
@@ -227,46 +225,90 @@ iJS.localVariablesScope = function(parseTree) {
  * They are converted to global variables by defining them as
  * attributes of the variable 'container'.
  */
-iJS.globalizeLocalVariables = function (parseTree, container) {
+iJS.globalizeLocalVariables = function (parseTree, varContainer) {
   var scope = new iJS.P.Scope();
   var f = function (v) {
-    return container + "." + v + "__" + scope.toVariableSuffix();
+    return varContainer + "." + scope.globalize(v);
   }
   
   return iJS.P.preplaceLocalVariables(parseTree, f, scope);
 }
 
-/* scope naming object */
+/* scope naming object. Used to globalize local variables. */
 iJS.P.Scope = function() {
   this.trace = [0];
+  /* each variable name have a stack of global names
+   * azzociated with the local name. The global name
+   * depends on the scope where the local variable was
+   * introduced in the current scope trace.
+   * A global varibale name is higher in stack
+   * iff it is neeper in a scope nesting we are in. */
+  this.globalizedNames = [];
+  /* local variable introduce stack of the current scope trace.
+   * Each layer of the stack contains a list(array)
+   * of the name of all local variables which
+   * was introduced in scrope depth depth.
+   * Thus, on the bottom of the stack are all local
+   * variables which are introduced in the first scope.
+   * In i'th lowest stackelement contains the list
+   * of all local variables introduced in the (i-1)'th
+   * nested scope. */
+  this.localVarDeclerations = [[]];
 }
-
 iJS.P.Scope.prototype.down = function() {
   this.trace.push(0);
+  this.localVarDeclerations.push([]);
 }
-
 iJS.P.Scope.prototype.up = function() {
   this.trace.pop();
+  
+  /* for each local variable which was introduced in the scope
+   * we are leaving, remove the top mapping to a global variable
+   * and leave the scope-depending nameing for outer scoped for this
+   * local variable unchanged.
+   * Thus, if we see a local variable of this name outside of this scrope
+   * we give it the correct globalized scope name (and not the globaleized name
+   * of the scope ne are leaving here). */
+  var localVarDecls = this.localVarDeclerations.pop();
+  var i;
+  for(i = 0; i < localVarDecls.length; i++) {
+    var global = this.globalizedNames[localVarDecls[i]];
+    if(global != null) {
+      global.pop();
+    }
+  }
 }
-
 iJS.P.Scope.prototype.next = function() {
   this.trace.push(this.trace.pop() + 1);
 }
-
 iJS.P.Scope.prototype.nest = function(f) {
   this.next(); this.down();
-  result = f();
+  var result = f();
   this.up();
   return result;
 }
-
-/* creates an variable suffix out of the scope */
+iJS.P.Scope.prototype.declareVar = function(v) {
+  if(this.globalizedNames[v] == null) {
+    this.globalizedNames[v] = [];
+  }
+  console.log(v + "__" + this.toVariableSuffix());
+  this.globalizedNames[v].push(v + "__" + this.toVariableSuffix());
+  this.localVarDeclerations[this.localVarDeclerations.length - 1].push(v);
+}
+/* creates an variable suffix out of the scope
+ * PRIVATE */
 iJS.P.Scope.prototype.toVariableSuffix = function() {
-  /* we create an local copy of the trace */
-  var out = this.trace.slice()
+  /* we create an local copy of the scope trace */
+  var out = this.trace.slice();
   out.pop();
   
   return iJS.H.intercalate("_", out);
+}
+iJS.P.Scope.prototype.globalize = function(v) {
+  var globals = this.globalizedNames[v];
+  if(globals == null)
+    return null;
+  return globals[globals.length - 1];
 }
 
 /* replace all local variables using f in a gobal scope */
@@ -280,6 +322,9 @@ iJS.P.preplaceLocalVariables = function (parseTree, f, scope) {
       return [ parseTree[0], parseTree[1].map(_f) ];
     /* linecases */
     case "var":
+      // register new variables here, such that they hiding variables with
+      // the same name from outer scopes.
+      parseTree[1].map(function (x) {scope.declareVar(x[0]);});
       return [ parseTree[0], parseTree[1].map(function (x) {return [x[0], _f(x[1])];}) ];
     case "stat":
     case "return":
@@ -287,17 +332,18 @@ iJS.P.preplaceLocalVariables = function (parseTree, f, scope) {
     case "if":
       return [ parseTree[0],
         parseTree[1],
-        scope.nest(function () { return parseTree[2].map(_g); })
+        scope.nest(function () { return _g(parseTree[2]); })
       ];
     case "defun":
     case "function":
       return scope.nest(function () {
-        var _q = function(x) {return ["__paramassign", [[f(x), ["name", x]]] ]; };
-        
+        // declare function parameter as local variables such that they hiding variables with
+        // the same name from outer scopes.
+        parseTree[2].map(function (x) {scope.declareVar(x);});
         return [ parseTree[0],
           parseTree[1],
-          parseTree[2],
-          parseTree[2].map(_q).concat(parseTree[3].map(_g))
+          parseTree[2].map(f),
+          parseTree[3].map(_g)
         ];
       });
     /* stmt cases */
@@ -314,6 +360,10 @@ iJS.P.preplaceLocalVariables = function (parseTree, f, scope) {
       return [ parseTree[0], _f(parseTree[1]), _f(parseTree[2]) ];
     case "binary":
       return [ parseTree[0], parseTree[1], _f(parseTree[2]), _f(parseTree[3]) ];
+    case "block":
+      return scope.nest(function() {
+        return [parseTree[0], parseTree[1].map(_g)];
+      });
     default:
       error("unkown case " + parseTree[0] + ": \n" + parseTree);
   }
@@ -329,6 +379,9 @@ iJS.P.preplaceLocalVariablesScope = function (parseTree, f, scope) {
       return [ parseTree[0], parseTree[1].map(_g) ];
     /* linecases */
     case "var":
+      // register new variables here, such that they hiding variables with
+      // the same name from outer scopes.
+      parseTree[1].map(function (x) {scope.declareVar(x[0]);});
       return [ parseTree[0], parseTree[1].map(function (x) {return [f(x[0]), _g(x[1])];}) ];
     case "stat":
     case "return":
@@ -336,17 +389,18 @@ iJS.P.preplaceLocalVariablesScope = function (parseTree, f, scope) {
     case "if":
       return [ parseTree[0],
         _g(parseTree[1]),
-        scope.nest(function () { return parseTree[2].map(_g); })
+        scope.nest(function () { return _g(parseTree[2]); })
       ];
     case "defun":
     case "function":
       return scope.nest(function () {
-        var _q = function(x) {return ["__paramassign", [[f(x), ["name", x]]] ]; };
-        
+        // declare function parameter as local variables such that they hiding variables with
+        // the same name from outer scopes.
+        parseTree[2].map(function (x) {scope.declareVar(x);});
         return [ parseTree[0],
           parseTree[1],
-          parseTree[2],
-          parseTree[2].map(_q).concat(parseTree[3].map(_g))
+          parseTree[2].map(f),
+          parseTree[3].map(_g)
         ];
       });
     /* stmt cases */
@@ -364,6 +418,120 @@ iJS.P.preplaceLocalVariablesScope = function (parseTree, f, scope) {
       return [ parseTree[0], _g(parseTree[1]), _g(parseTree[2]) ];
     case "binary":
       return [ parseTree[0], parseTree[1], _g(parseTree[2]), _g(parseTree[3]) ];
+    case "block":
+      return scope.nest(function() {
+        return [parseTree[0], parseTree[1].map(_g)];
+      });
+    default:
+      error("unkown case " + parseTree[0] + ": \n" + parseTree);
+  }
+}
+
+/*****
+ ***** code decomposer
+ *****
+ *****/
+
+iJS.P.Decomposed = function() {
+}
+iJS.P.Decomposed.prototype.main = function() {
+  return this.mainChuck;
+}
+/* register a function for this decomposition with
+ * - 'params' - array of parameters of the function
+ * - 'parseTree' - the parse-tree of the function
+ *    (which is also decomposed, thus local functions
+ *     are replace by a call funHandle)
+ * a handle to the function chuck is returned
+ * (of type iJS.P.Fun).
+ *  funHandle = decomposed.addFun(params, parseTree)
+ *  funHandle.call(1,2); // will call the function with arguments 1,2.
+ */
+iJS.P.Decomposed.prototype.addFun = function(params, parseTree) {
+  return new iJS.P.Fun(this, params, parseTree);
+}
+iJS.P.Fun = function(decomposed, params, parseTree) {
+  this.decomposed = decomposed;
+  this.params = params;
+  this.parseTree = parseTree;
+}
+
+/* decompose code into
+ * a chuck (parse-tree) c_i for each function f_i found in the code
+ * the main chuck c (parsed-tree) (the code without the function definitions)
+ *
+ * d = iJS.P.decompose(parseTree)
+ * d.main() - access to the main chuck
+ * d.fun(name :: string) - access to the chuck of the function with name 'name'
+ */
+iJS.P.decompose = function(parseTree, varContainer) {
+  /* parse-tree with globalized local variables */
+  var glParseTree = iJS.globalizeLocalVariables(parseTree, varContainer);
+  
+  var decomposed = new iJS.P.Decomposed();
+  decomposed.mainChuck = iJS.P.decompose0(glParseTree, decomposed)
+  return decomposed;
+}
+
+/* inner helper for iJS.P.decompose */
+iJS.P.decompose0 = function(parseTree, decomposed) {
+  var _g = function(p) {return iJS.P.decompose0(p, decomposed)}
+  
+  switch(parseTree[0]) {
+    case "toplevel":
+    case "array":
+      return [ parseTree[0], parseTree[1].map(_g) ];
+    /* linecases */
+    case "var":
+      return [ parseTree[0], parseTree[1].map(function (x) {return [x[0], _g(x[1])];}) ];
+    case "stat":
+    case "return":
+      return [ parseTree[0], _g(parseTree[1]) ];
+    case "if":
+      return [ parseTree[0],
+        _g(parseTree[1]),
+        _g(parseTree[2])
+      ];
+    case "defun":
+    case "function":
+      // extract function chuck
+      funHandle = decomposed.addFun( parseTree[2], _g(["toplevel", parseTree[3]]) );
+      
+      /* variant 1 */
+      if(parseTree[1] != null) {
+        return ["__globalfun", parseTree[1], funHandle];
+      }
+      // return the funHandle, to know the function-chuck extracted here
+      else {
+        return ["__globalfun", null, funHandle];
+      }
+      
+      /* variant 2 */
+      // register the function name to call this function if one is available
+        //if(parseTree[1] != null) {
+        //  return ["stat", ["assign", true, ["name", parseTree[1]], ["__globalfun", funHandle]]];
+        // }
+      // return the funHandle, to know the function-chuck extracted here
+        //else {
+        //  return ["__globalfun", funHandle];
+        //}
+    /* stmt cases */
+    case "assign":
+      return [ parseTree[0], parseTree[1], _g(parseTree[2]), _g(parseTree[3]) ];
+    case "call":
+      return [ parseTree[0], _g(parseTree[1]), parseTree[2].map(_g) ];
+    /* expr cases */
+    case "name":
+      return [ parseTree[0], parseTree[1] ];
+    case "num":
+    case "string":
+      return [ parseTree[0], parseTree[1] ];
+    case "sub":
+      return [ parseTree[0], _g(parseTree[1]), _g(parseTree[2]) ];
+    case "binary":
+      return [ parseTree[0], parseTree[1], _g(parseTree[2]), _g(parseTree[3]) ];
+    case "block":
+      return [parseTree[0], parseTree[1].map(_g)];
     default:
       error("unkown case " + parseTree[0] + ": \n" + parseTree);
   }
