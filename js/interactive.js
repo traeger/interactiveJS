@@ -45,6 +45,11 @@ iJS.toCode = function(parseTree, intent) {
   return iJS.P.toCode(parseTree, intent);
 }
 
+/* Executes the js-code associated with its parse-tree */
+iJS.exec = function(parseTree) {
+  eval(iJS.toCode(parseTree));
+}
+
 /* parseTree to pretty code converter */
 iJS.P = new Object();
 /* code generations for interactive code execution. */
@@ -226,16 +231,16 @@ iJS.localVariablesScope = function(parseTree) {
  * attributes of the variable 'container'.
  */
 iJS.globalizeLocalVariables = function (parseTree, varContainer) {
-  var scope = new iJS.P.Scope();
+  var scope = new iJS.G.Scope();
   var f = function (v) {
     return varContainer + "." + scope.globalize(v);
   }
   
-  return iJS.P.preplaceLocalVariables(parseTree, f, scope);
+  return iJS.G.preplaceLocalVariables(parseTree, f, scope);
 }
 
 /* scope naming object. Used to globalize local variables. */
-iJS.P.Scope = function() {
+iJS.G.Scope = function() {
   this.trace = [0];
   /* each variable name have a stack of global names
    * azzociated with the local name. The global name
@@ -255,11 +260,11 @@ iJS.P.Scope = function() {
    * nested scope. */
   this.localVarDeclerations = [[]];
 }
-iJS.P.Scope.prototype.down = function() {
+iJS.G.Scope.prototype.down = function() {
   this.trace.push(0);
   this.localVarDeclerations.push([]);
 }
-iJS.P.Scope.prototype.up = function() {
+iJS.G.Scope.prototype.up = function() {
   this.trace.pop();
   
   /* for each local variable which was introduced in the scope
@@ -278,16 +283,16 @@ iJS.P.Scope.prototype.up = function() {
     }
   }
 }
-iJS.P.Scope.prototype.next = function() {
+iJS.G.Scope.prototype.next = function() {
   this.trace.push(this.trace.pop() + 1);
 }
-iJS.P.Scope.prototype.nest = function(f) {
+iJS.G.Scope.prototype.nest = function(f) {
   this.next(); this.down();
   var result = f();
   this.up();
   return result;
 }
-iJS.P.Scope.prototype.declareVar = function(v) {
+iJS.G.Scope.prototype.declareVar = function(v) {
   if(this.globalizedNames[v] == null) {
     this.globalizedNames[v] = [];
   }
@@ -297,14 +302,14 @@ iJS.P.Scope.prototype.declareVar = function(v) {
 }
 /* creates an variable suffix out of the scope
  * PRIVATE */
-iJS.P.Scope.prototype.toVariableSuffix = function() {
+iJS.G.Scope.prototype.toVariableSuffix = function() {
   /* we create an local copy of the scope trace */
   var out = this.trace.slice();
   out.pop();
   
   return iJS.H.intercalate("_", out);
 }
-iJS.P.Scope.prototype.globalize = function(v) {
+iJS.G.Scope.prototype.globalize = function(v) {
   var globals = this.globalizedNames[v];
   if(globals == null)
     return null;
@@ -312,23 +317,12 @@ iJS.P.Scope.prototype.globalize = function(v) {
 }
 
 /* replace all local variables using f in a gobal scope */
-iJS.P.preplaceLocalVariables = function (parseTree, f, scope) {
-  var _f = function(p) {return iJS.P.preplaceLocalVariables(p, f, scope)};
-  var _g = function(p) {return iJS.P.preplaceLocalVariablesScope(p, f, scope)};
+iJS.G.preplaceLocalVariables = function (parseTree, f, scope) {
+  var _f = function(p) {return iJS.G.preplaceLocalVariables(p, f, scope)};
+  var _g = function(p) {return iJS.G.preplaceLocalVariablesScope(p, f, scope)};
   
   switch(parseTree[0]) {
-    case "toplevel":
-    case "array":
-      return [ parseTree[0], parseTree[1].map(_f) ];
     /* linecases */
-    case "var":
-      // register new variables here, such that they hiding variables with
-      // the same name from outer scopes.
-      parseTree[1].map(function (x) {scope.declareVar(x[0]);});
-      return [ parseTree[0], parseTree[1].map(function (x) {return [x[0], _f(x[1])];}) ];
-    case "stat":
-    case "return":
-      return [ parseTree[0], _f(parseTree[1]) ];
     case "if":
       return [ parseTree[0],
         parseTree[1],
@@ -346,46 +340,26 @@ iJS.P.preplaceLocalVariables = function (parseTree, f, scope) {
           parseTree[3].map(_g)
         ];
       });
-    /* stmt cases */
-    case "assign":
-      return [ parseTree[0], parseTree[1], _f(parseTree[2]), _f(parseTree[3]) ];
-    case "call":
-      return [ parseTree[0], parseTree[1], parseTree[2].map(_f) ];
-    /* expr cases */
-    case "name":
-    case "num":
-    case "string":
-      return [ parseTree[0], parseTree[1] ];
-    case "sub":
-      return [ parseTree[0], _f(parseTree[1]), _f(parseTree[2]) ];
-    case "binary":
-      return [ parseTree[0], parseTree[1], _f(parseTree[2]), _f(parseTree[3]) ];
     case "block":
       return scope.nest(function() {
         return [parseTree[0], parseTree[1].map(_g)];
       });
     default:
-      error("unkown case " + parseTree[0] + ": \n" + parseTree);
+      return iJS.H.sink(parseTree, _f);
   }
 }
 
 /* replace all local variables using f in a local scope */
-iJS.P.preplaceLocalVariablesScope = function (parseTree, f, scope) {
-  var _g = function(p) {return iJS.P.preplaceLocalVariablesScope(p, f, scope)}
+iJS.G.preplaceLocalVariablesScope = function (parseTree, f, scope) {
+  var _g = function(p) {return iJS.G.preplaceLocalVariablesScope(p, f, scope)}
   
   switch(parseTree[0]) {
-    case "toplevel":
-    case "array":
-      return [ parseTree[0], parseTree[1].map(_g) ];
     /* linecases */
     case "var":
       // register new variables here, such that they hiding variables with
       // the same name from outer scopes.
       parseTree[1].map(function (x) {scope.declareVar(x[0]);});
       return [ parseTree[0], parseTree[1].map(function (x) {return [f(x[0]), _g(x[1])];}) ];
-    case "stat":
-    case "return":
-      return [ parseTree[0], _g(parseTree[1]) ];
     case "if":
       return [ parseTree[0],
         _g(parseTree[1]),
@@ -403,27 +377,15 @@ iJS.P.preplaceLocalVariablesScope = function (parseTree, f, scope) {
           parseTree[3].map(_g)
         ];
       });
-    /* stmt cases */
-    case "assign":
-      return [ parseTree[0], parseTree[1], _g(parseTree[2]), _g(parseTree[3]) ];
-    case "call":
-      return [ parseTree[0], _g(parseTree[1]), parseTree[2].map(_g) ];
     /* expr cases */
     case "name":
       return [ parseTree[0], f(parseTree[1]) ];
-    case "num":
-    case "string":
-      return [ parseTree[0], parseTree[1] ];
-    case "sub":
-      return [ parseTree[0], _g(parseTree[1]), _g(parseTree[2]) ];
-    case "binary":
-      return [ parseTree[0], parseTree[1], _g(parseTree[2]), _g(parseTree[3]) ];
     case "block":
       return scope.nest(function() {
         return [parseTree[0], parseTree[1].map(_g)];
       });
     default:
-      error("unkown case " + parseTree[0] + ": \n" + parseTree);
+      return iJS.H.sink(parseTree, _g);
   }
 }
 
@@ -432,9 +394,9 @@ iJS.P.preplaceLocalVariablesScope = function (parseTree, f, scope) {
  *****
  *****/
 
-iJS.P.Decomposed = function() {
+iJS.G.Decomposed = function() {
 }
-iJS.P.Decomposed.prototype.main = function() {
+iJS.G.Decomposed.prototype.main = function() {
   return this.mainChuck;
 }
 /* register a function for this decomposition with
@@ -443,14 +405,14 @@ iJS.P.Decomposed.prototype.main = function() {
  *    (which is also decomposed, thus local functions
  *     are replace by a call funHandle)
  * a handle to the function chuck is returned
- * (of type iJS.P.Fun).
+ * (of type iJS.G.Fun).
  *  funHandle = decomposed.addFun(params, parseTree)
  *  funHandle.call(1,2); // will call the function with arguments 1,2.
  */
-iJS.P.Decomposed.prototype.addFun = function(params, parseTree) {
-  return new iJS.P.Fun(this, params, parseTree);
+iJS.G.Decomposed.prototype.addFun = function(params, parseTree) {
+  return new iJS.G.Fun(this, params, parseTree);
 }
-iJS.P.Fun = function(decomposed, params, parseTree) {
+iJS.G.Fun = function(decomposed, params, parseTree) {
   this.decomposed = decomposed;
   this.params = params;
   this.parseTree = parseTree;
@@ -460,38 +422,24 @@ iJS.P.Fun = function(decomposed, params, parseTree) {
  * a chuck (parse-tree) c_i for each function f_i found in the code
  * the main chuck c (parsed-tree) (the code without the function definitions)
  *
- * d = iJS.P.decompose(parseTree)
+ * d = iJS.G.decompose(parseTree)
  * d.main() - access to the main chuck
  * d.fun(name :: string) - access to the chuck of the function with name 'name'
  */
-iJS.P.decompose = function(parseTree, varContainer) {
+iJS.G.decompose = function(parseTree, varContainer) {
   /* parse-tree with globalized local variables */
   var glParseTree = iJS.globalizeLocalVariables(parseTree, varContainer);
   
-  var decomposed = new iJS.P.Decomposed();
-  decomposed.mainChuck = iJS.P.decompose0(glParseTree, decomposed)
+  var decomposed = new iJS.G.Decomposed();
+  decomposed.mainChuck = iJS.G.decompose0(glParseTree, decomposed)
   return decomposed;
 }
 
 /* inner helper for iJS.P.decompose */
-iJS.P.decompose0 = function(parseTree, decomposed) {
-  var _g = function(p) {return iJS.P.decompose0(p, decomposed)}
+iJS.G.decompose0 = function(parseTree, decomposed) {
+  var _g = function(p) {return iJS.G.decompose0(p, decomposed)}
   
   switch(parseTree[0]) {
-    case "toplevel":
-    case "array":
-      return [ parseTree[0], parseTree[1].map(_g) ];
-    /* linecases */
-    case "var":
-      return [ parseTree[0], parseTree[1].map(function (x) {return [x[0], _g(x[1])];}) ];
-    case "stat":
-    case "return":
-      return [ parseTree[0], _g(parseTree[1]) ];
-    case "if":
-      return [ parseTree[0],
-        _g(parseTree[1]),
-        _g(parseTree[2])
-      ];
     case "defun":
     case "function":
       // extract function chuck
@@ -515,25 +463,8 @@ iJS.P.decompose0 = function(parseTree, decomposed) {
         //else {
         //  return ["__globalfun", funHandle];
         //}
-    /* stmt cases */
-    case "assign":
-      return [ parseTree[0], parseTree[1], _g(parseTree[2]), _g(parseTree[3]) ];
-    case "call":
-      return [ parseTree[0], _g(parseTree[1]), parseTree[2].map(_g) ];
-    /* expr cases */
-    case "name":
-      return [ parseTree[0], parseTree[1] ];
-    case "num":
-    case "string":
-      return [ parseTree[0], parseTree[1] ];
-    case "sub":
-      return [ parseTree[0], _g(parseTree[1]), _g(parseTree[2]) ];
-    case "binary":
-      return [ parseTree[0], parseTree[1], _g(parseTree[2]), _g(parseTree[3]) ];
-    case "block":
-      return [parseTree[0], parseTree[1].map(_g)];
     default:
-      error("unkown case " + parseTree[0] + ": \n" + parseTree);
+      return iJS.H.sink(parseTree, _g);
   }
 }
 
@@ -573,80 +504,6 @@ iJS.G.gen = function (parseTree) {
    * generate pretty code, and execute it.
    */
   return eval(iJS.toCode(["array",fwrapLines]));
-}
-
-/* Iterates over an array.
- *
- * The callback is a function with two arguments
- * (the current element, the recursive call to this functions)
- * the recursive call argument need to be called when the next
- * element should be iterated.
- *
- * Pattern:
-  g = function(a, iterator) {
-    .. do stuff with a ..
-    iterator();
-  }
-  iJS.G.iterate(as, g);
- * this will call g for each element in as.
- *
- * This pattern allows asynchrone iterations - through events and
- * all that. Beware that this style of iteration is very resource
- * intensive and generates a giant stack in some cases.
- */
-iJS.G.interate = function(as, callback) {
-  if(as.length == 0)
-    return;
-  else {
-    a = as.shift();
-    callback(
-      a,
-      function() {
-        iJS.G.interate(as, callback);
-      }
-    );
-  }
-}
-
-/* JUNK */
-/* sink a function (f :: parseTree -> parseTree) down to all direct RHS children */
-iJS.G.sinkRHS = function (parseTree, f) {
-  var _f = function(p) {return f(p)}
-  
-  switch(parseTree[0]) {
-    case "eval":
-      return parseTree;
-    case "name":
-    case "num":
-    case "string":
-      return parseTree;
-    case "toplevel":
-    case "array":
-      return [ parseTree[0], parseTree[1].map(_f) ];
-    /* linecases */
-    case "var":
-      return [ parseTree[0], parseTree[1].map(function (x) {return [x[0], _f(x[1])];}) ];
-    case "stat":
-    case "return":
-      return [ parseTree[0], _f(parseTree[1]) ];
-    case "if":
-      return [ parseTree[0], _f(parseTree[1]), parseTree[2].map(_f) ];
-    case "defun":
-    case "function":
-      return [ parseTree[0], parseTree[1], parseTree[2], parseTree[3].map(_f) ];
-    /* stmt cases */
-    case "assign":
-      return [ parseTree[0], parseTree[1], parseTree[2], _f(parseTree[3]) ];
-    case "call":
-      return [ parseTree[0], _f(parseTree[1]), parseTree[2].map(_f) ];
-    /* expr cases */
-    case "sub":
-      return [ parseTree[0], _f(parseTree[1]), _f(parseTree[2]) ];
-    case "binary":
-      return [ parseTree[0], parseTree[1], _f(parseTree[2]), _f(parseTree[3]) ];
-    default:
-      error("unkown case " + parseTree[0] + ": \n" + parseTree);
-  }
 }
 
 /* JUNK */
@@ -702,4 +559,81 @@ iJS.H.intercalate = function (seperator, as) {
     result += as[i];
   }
   return result;
+}
+
+/* Iterates over an array.
+ *
+ * The callback is a function with two arguments
+ * (the current element, the recursive call to this functions)
+ * the recursive call argument need to be called when the next
+ * element should be iterated.
+ *
+ * Pattern:
+  g = function(a, iterator) {
+    .. do stuff with a ..
+    iterator();
+  }
+  iJS.H.iterate(as, g);
+ * this will call g for each element in as.
+ *
+ * This pattern allows asynchrone iterations - through events and
+ * all that. Beware that this style of iteration is very resource
+ * intensive and generates a giant stack in some cases.
+ */
+iJS.H.iterate = function(as, callback) {
+  if(as.length == 0)
+    return;
+  else {
+    a = as.shift();
+    callback(
+      a,
+      function() {
+        iJS.H.iterate(as, callback);
+      }
+    );
+  }
+}
+
+/* sink the application of a function (f :: parseTree -> parseTree) down to all direct parse-tree-children
+ * of a parse-tree.
+ *
+ * example:
+ * iJS.H.sink(["binary", ["num", 1], ["binary", ["name", "x"], ["num", 2] ] ], f)
+ *          = ["binary", f(["num", 1]), f(["binary", ["name", "x"], ["num", 2] ]) ] ) */
+iJS.H.sink = function (parseTree, f) {
+  switch(parseTree[0]) {
+    case "eval":
+    case "name":
+    case "num":
+    case "string":
+      return parseTree;
+    case "toplevel":
+    case "array":
+      return [ parseTree[0], parseTree[1].map(f) ];
+    /* linecases */
+    case "var":
+      return [ parseTree[0], parseTree[1].map(function (x) {return [x[0], f(x[1])];}) ];
+    case "stat":
+    case "return":
+      return [ parseTree[0], f(parseTree[1]) ];
+    case "if":
+      return [ parseTree[0], f(parseTree[1]), f(parseTree[2]) ];
+    case "defun":
+    case "function":
+      return [ parseTree[0], parseTree[1], parseTree[2], parseTree[3].map(f) ];
+    /* stmt cases */
+    case "assign":
+      return [ parseTree[0], parseTree[1], parseTree[2], f(parseTree[3]) ];
+    case "call":
+      return [ parseTree[0], f(parseTree[1]), parseTree[2].map(f) ];
+    /* expr cases */
+    case "sub":
+      return [ parseTree[0], f(parseTree[1]), f(parseTree[2]) ];
+    case "binary":
+      return [ parseTree[0], parseTree[1], f(parseTree[2]), f(parseTree[3]) ];
+    case "block":
+      return [parseTree[0], parseTree[1].map(f)];
+    default:
+      error("unkown case in iJS.H.sinkRHS " + parseTree[0] + ": \n" + parseTree);
+  }
 }

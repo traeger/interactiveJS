@@ -4,7 +4,8 @@
     <script src="../js/UglifyJS/lib/parse-js.js"></script>
     <script>
       // test pretty code generation
-      eval(iJS.P.toCode(parse("q = function(y) {return y*2}")));
+      var qCode = parse("q = function(y) {return y*2}");
+      iJS.exec(qCode);
       alert(q(10));
    
       // find local variables
@@ -37,12 +38,12 @@
       alert("y expected to be 10. y is " + y);
       
       // code decomposer
-      dcmPa = iJS.P.decompose(parse("p = function(x) {var y = 1; return x+y;}"), "s");
+      dcmPa = iJS.G.decompose(parse("p = function(x) {var y = 1; return x+y;}"), "s");
       
-      dcmPb = iJS.P.decompose(parse("function p(x) {var y = 1; return x+y;}"), "s");
+      dcmPb = iJS.G.decompose(parse("function p(x) {var y = 1; return x+y;}"), "s");
       
       dcmPcS = parse("if(x==1) {var x = 1; if(x==1) {var x = 2;}}");
-      dcmPc = iJS.P.decompose(dcmPcS, "s");
+      dcmPc = iJS.G.decompose(dcmPcS, "s");
     </script>
   </head>
 </html>
