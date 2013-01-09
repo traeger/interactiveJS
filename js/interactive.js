@@ -54,6 +54,8 @@ iJS.exec = function(parseTree) {
 iJS.P = new Object();
 /* code generations for interactive code execution. */
 iJS.G = new Object();
+/* code execution, stepwise execution and debugging */
+iJS.E = new Object();
 /* helper */
 iJS.H = new Object();
 
@@ -115,6 +117,13 @@ iJS.P.toCode = function (parseTree, intent) {
       return "function(" + iJS.H.intercalate(", ", parseTree[2]) + ") " + iJS.P.blockToCode(parseTree[3], intent);
     case "array":
       return "[" + iJS.H.intercalate(", ", parseTree[1].map(_f) ) + "]";
+    case "block":
+      if(parseTree.length >= 2) {
+        return iJS.P.blockToCode(parseTree[1], intent); 
+      }
+      else {
+        return "";
+      }
     case "__eval":
       return parseTree[2];
     default:
@@ -341,9 +350,14 @@ iJS.G.preplaceLocalVariables = function (parseTree, f, scope) {
         ];
       });
     case "block":
-      return scope.nest(function() {
-        return [parseTree[0], parseTree[1].map(_g)];
-      });
+      if(parseTree.length >= 2) {
+        return scope.nest(function() {
+          return [parseTree[0], parseTree[1].map(_g)];
+        }); 
+      }
+      else {
+        return ["block"];
+      }
     default:
       return iJS.H.sink(parseTree, _f);
   }
@@ -381,9 +395,14 @@ iJS.G.preplaceLocalVariablesScope = function (parseTree, f, scope) {
     case "name":
       return [ parseTree[0], f(parseTree[1]) ];
     case "block":
-      return scope.nest(function() {
-        return [parseTree[0], parseTree[1].map(_g)];
-      });
+      if(parseTree.length >= 2) {
+        return scope.nest(function() {
+          return [parseTree[0], parseTree[1].map(_g)];
+        });
+      }
+      else {
+        return ["block"];
+      }
     default:
       return iJS.H.sink(parseTree, _g);
   }
@@ -395,6 +414,8 @@ iJS.G.preplaceLocalVariablesScope = function (parseTree, f, scope) {
  *****/
 
 iJS.G.Decomposed = function() {
+  /* a map from funhandle to function description (iJS.G.Fun) */
+  funs = [];
 }
 iJS.G.Decomposed.prototype.main = function() {
   return this.mainChuck;
@@ -410,7 +431,13 @@ iJS.G.Decomposed.prototype.main = function() {
  *  funHandle.call(1,2); // will call the function with arguments 1,2.
  */
 iJS.G.Decomposed.prototype.addFun = function(params, parseTree) {
-  return new iJS.G.Fun(this, params, parseTree);
+  var funHandle = this.funs.length;
+  funs.push(new iJS.G.Fun(this, params, parseTree));
+  return funHandle;
+}
+/* get a function description (iJS.G.Fun) by it's funHandle */
+iJS.G.Decomposed.prototype.getFunByHandle = function(funHandle) {
+  return this.funs[funHandle];
 }
 iJS.G.Fun = function(decomposed, params, parseTree) {
   this.decomposed = decomposed;
@@ -466,6 +493,101 @@ iJS.G.decompose0 = function(parseTree, decomposed) {
     default:
       return iJS.H.sink(parseTree, _g);
   }
+}
+
+/* Removes all variable delerations from the parse-tree and
+ * replace them by simple assignments.
+ * 
+ * Beware that this may change the semantics of the code interpretation
+ * of the parse-tree, since variables are no longer local in a scope if they
+ * overlap with a variable of the same name in an outer scope.
+ *
+ * This function does not change the semantic of the code interpretation
+ * of the parse-tree if all variables in the program (all! - including
+ * variables not contained in the parse-tree itself) have unique names.
+ */
+iJS.G.rmVarDeclaration = function(parseTree) {
+  var _f = function(p) {return iJS.G.rmVarDeclaration(p)};
+  var q = function(x) {
+    switch(x.length) {
+      case 1:
+        return ["stat", ["block"] ];
+      case 2:
+        return ["stat", ["assign", true, ["name", x[0]], _f(x[1])] ];
+      default:
+        console.error("iJS.G.rmVarDeclaration: unknow number of entries in " + x);
+    }
+  }
+  
+  switch(parseTree[0]) {
+    case "var":
+      return ["block", parseTree[1].map(q)];
+    default:
+      return iJS.H.sink(parseTree, _f);
+  }
+}
+
+/*****
+ ***** code execution
+ *****
+ *****/
+/*
+ * Converts all "__globalfun" constructs to
+ * function calls of the function with the name 'nameOfCallback'.
+ *
+ * 'nameOfCallback' has to be the name of a function with the signature
+ * iJS.G.Fun -> void - thus 'nameOfCallback'(fun) : E.
+ *
+ * The function 'nameOfCallback' will be called instead of fun whenever fun would be called.
+ */
+iJS.E.globalfunToEvalCallback = function(parseTree, nameOfCallback) {
+  var _f = function(p) {return iJS.G.globalfunAsCallback0(p)}
+  
+  switch(parseTree[0]) {
+    case "__globalfun":
+      /*
+       * fun : iJS.G.Fun
+       */
+      var funHandle = parseTree[2];
+      
+      var funcall = ["return", ["call", nameOfCallback, [funHandle, "arguments"] ] ];
+      if(parseTree[1] == null) {
+        return ["defun", null, [], [funcall]];
+      } else {
+        return ["function", parseTree[1], [], [funcall]];
+      }
+    default:
+      return iJS.H.sink(parseTree, _f);
+  }
+}
+
+/*
+ * decomposed : iJS.G.Decomposed
+ */
+iJS.E.exec = function(decomposed) {
+  var _f = function(funHandle0, params0) {
+    iJS.E.execFun(decomposed, funHandle0, params0)
+  }
+  
+  var executeableCode = iJS.E.globalfunToEvalCallback(decomposed.mainChuck, "_f");
+  iJS.exec(executeableCode);
+}
+
+iJS.E.execFun = function(decomposed, funHandle, params) {
+  var _f = function(funHandle0, params0) {
+    iJS.E.execFun(decomposed, funHandle0, params0)
+  }
+  
+  var paramvalues = fun.params.map(function (paramname) {return eval(paramname)});
+  var fun = decomposed.getFunByHandle(funHandle);
+  var funParamNames = fun.params;
+  var executeableCode = iJS.E.globalfunToEvalCallback(fun.parseTree, "_f");
+  /* assign parameter values */
+  for(var i = 0; i < params.length; i++) {
+    eval(funParamNames[i] + " = " + params[i] + ";");
+  }
+  /* exec the function body code */
+  iJS.exec(executeableCode);
 }
 
 /*****
@@ -632,7 +754,12 @@ iJS.H.sink = function (parseTree, f) {
     case "binary":
       return [ parseTree[0], parseTree[1], f(parseTree[2]), f(parseTree[3]) ];
     case "block":
-      return [parseTree[0], parseTree[1].map(f)];
+      if(parseTree.length >= 2) {
+        return [parseTree[0], parseTree[1].map(f)];
+      }
+      else {
+        return ["block"];
+      }
     default:
       error("unkown case in iJS.H.sinkRHS " + parseTree[0] + ": \n" + parseTree);
   }
