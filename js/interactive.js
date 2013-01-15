@@ -127,7 +127,7 @@ iJS.P.toCode = function (parseTree, intent) {
     case "__eval":
       return parseTree[2];
     default:
-      error("unkown case " + parseTree[0] + ": \n" + parseTree);
+      error("unkown case iJS.P.toCode " + parseTree[0] + ": \n" + parseTree);
   }
 }
 
@@ -415,10 +415,8 @@ iJS.G.preplaceLocalVariablesScope = function (parseTree, f, scope) {
 
 iJS.G.Decomposed = function() {
   /* a map from funhandle to function description (iJS.G.Fun) */
-  funs = [];
-}
-iJS.G.Decomposed.prototype.main = function() {
-  return this.mainChuck;
+  this.funs = [];
+  this.mainChuck = undefined;
 }
 /* register a function for this decomposition with
  * - 'params' - array of parameters of the function
@@ -432,7 +430,7 @@ iJS.G.Decomposed.prototype.main = function() {
  */
 iJS.G.Decomposed.prototype.addFun = function(params, parseTree) {
   var funHandle = this.funs.length;
-  funs.push(new iJS.G.Fun(this, params, parseTree));
+  this.funs.push(new iJS.G.Fun(this, params, parseTree));
   return funHandle;
 }
 /* get a function description (iJS.G.Fun) by it's funHandle */
@@ -541,7 +539,7 @@ iJS.G.rmVarDeclaration = function(parseTree) {
  * The function 'nameOfCallback' will be called instead of fun whenever fun would be called.
  */
 iJS.E.globalfunToEvalCallback = function(parseTree, nameOfCallback) {
-  var _f = function(p) {return iJS.G.globalfunAsCallback0(p)}
+  var _f = function(p) {return iJS.E.globalfunToEvalCallback(p, nameOfCallback)}
   
   switch(parseTree[0]) {
     case "__globalfun":
@@ -761,6 +759,6 @@ iJS.H.sink = function (parseTree, f) {
         return ["block"];
       }
     default:
-      error("unkown case in iJS.H.sinkRHS " + parseTree[0] + ": \n" + parseTree);
+      error("unkown case in iJS.H.sinkRHS " + parseTree[0] + ": \n" + iJS.toCode(parseTree));
   }
 }
