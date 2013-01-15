@@ -689,18 +689,18 @@ iJS.H.intercalate = function (seperator, as) {
  * element should be iterated.
  *
  * Pattern:
-  g = function(a, iterator) {
+  g = function(a, iterate) {
     .. do stuff with a ..
-    iterator();
+    iterate();
   }
   iJS.H.iterate(as, g);
  * this will call g for each element in as.
  *
  * This pattern allows asynchrone iterations - through events and
- * all that. Beware that this style of iteration is very resource
- * intensive and generates a giant stack in some cases.
+ * all that. Beware that this style of iteration generates a function
+ * call stack of size 2*as.length .
  */
-iJS.H.iterate = function(as, callback) {
+iJS.H.iterateRecursive = function(as, callback) {
   if(as.length == 0)
     return;
   else {
@@ -708,14 +708,14 @@ iJS.H.iterate = function(as, callback) {
     callback(
       a,
       function() {
-        iJS.H.iterate(as, callback);
+        iJS.H.iterateRecursive(as, callback);
       }
     );
   }
 }
 
-/* sink the application of a function (f :: parseTree -> parseTree) down to all direct parse-tree-children
- * of a parse-tree.
+/* sink the application of a function (f :: parseTree -> parseTree) down to all direct children
+ * of the root node of a parse-tree.
  *
  * example:
  * iJS.H.sink(["binary", ["num", 1], ["binary", ["name", "x"], ["num", 2] ] ], f)
